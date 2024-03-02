@@ -167,11 +167,11 @@ private:
 		if (!node) {
 			return nullptr;
 		}
-		if (node == root) {
-			delete node;
-			root = nullptr;
-			return nullptr;
-		}
+		//if (node == root) {
+		//	delete node;
+		//	root = nullptr;
+		//	return nullptr;
+		//}
 		do {
 			originColor = node->color;
 			if (!node->left) {
