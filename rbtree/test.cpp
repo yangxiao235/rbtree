@@ -33,7 +33,7 @@ public:
 	{
 		Color originalColor;
 		Node* node = rbremove(elem, originalColor);
-		if (originalColor == BLACK) {
+		if (node && originalColor == BLACK) {
 			removeFixup(node);
 		}
 	}
@@ -190,7 +190,11 @@ private:
 				originColor = successor->color;
 				ret = successor->right;
 				transparent(successor->right, successor);
+				successor->right = node->right;
+				node->right->parent = successor;
 			}
+			successor->left = node->left;
+			node->left->parent = successor;
 			successor->color = node->color;
 			transparent(successor, node);
 		} while (false);
@@ -296,13 +300,14 @@ TEST(RBTree, TestDelete) {
 		EXPECT_EQ(tree.find(28), true);
 		EXPECT_EQ(tree.find(5), true);
 	}
+
 	{
 		RBTree tree;
 		tree.root = new Node(9);
 		makeChilds(tree.root, new Node(5, BLACK), new Node(17, BLACK));
 		makeChilds(tree.root->left, new Node(1, RED), new Node(6, BLACK));
 		makeChilds(tree.root->left->left, new Node(-1, BLACK), new Node(3, BLACK));
-		makeChilds(tree.root->right, nullptr, new Node(28, BLACK));
+		makeChilds(tree.root->right, new Node(11, BLACK), new Node(28, BLACK));
 		int elems[] = {9, 5, 17, 1, 6, -1, 3, 28};
 		for (int i = 0; i < sizeof(elems)/sizeof(elems[0]); i++) {
 			tree.remove(elems[i]);
@@ -310,7 +315,6 @@ TEST(RBTree, TestDelete) {
 				EXPECT_EQ(tree.find(elems[j]), false);
 			}
 			for (int j = i+1; j < sizeof(elems)/sizeof(elems[0]); j++) {
-				std::cout << "j = " << j << ", elem " << elems[j] << std::endl;
 				EXPECT_EQ(tree.find(elems[j]), true);
 			}
 		}
