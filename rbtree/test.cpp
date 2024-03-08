@@ -141,6 +141,27 @@ private:
         node->parent = l;
     }
 
+    Node* findNode(int elem) {
+        Node* node = root;
+        while (!node->isNil() && node->elem != elem) {
+            if (node->elem < elem) {
+                node = node->right;
+            }
+            else {
+                node = node->left;
+            }
+        }
+        return node;
+    }
+
+    Node* minimum(Node* node) {
+        assert(node);
+        while (node->left) {
+            node = node->left;
+        }
+        return node;
+    }
+
     void removeFixup(Node* node) {
         while (node != root && node->color == BLACK) {
             /*
@@ -150,7 +171,7 @@ private:
              remove->B     C   ->      nil2  C    nil2为双重黑色
                    /   \
                   nil1 nil2
-                    
+
                   B为黑色
 
             */
@@ -192,7 +213,7 @@ private:
                     continue;
                 }
                 // left->right为红色
-                if (nodeColor(left->left)== BLACK) {
+                if (nodeColor(left->left) == BLACK) {
                     left->right->color = BLACK;
                     left->color = RED;
                     leftRotate(left);
@@ -204,27 +225,6 @@ private:
             }
         }
         root->color = BLACK;
-    }
-
-    Node* findNode(int elem) {
-        Node* node = root;
-        while (!node->isNil() && node->elem != elem) {
-            if (node->elem < elem) {
-                node = node->right;
-            }
-            else {
-                node = node->left;
-            }
-        }
-        return node;
-    }
-
-    Node* minimum(Node* node) {
-        assert(node);
-        while (node->left) {
-            node = node->left;
-        }
-        return node;
     }
 
     Node *rbremove(Node* node, Color &originColor)
@@ -282,8 +282,7 @@ private:
              B节点的左孩子, 右孩子均不为nil, 找到B节点的后继(successor), 移到B节点位置, 原来的successor位置由
              successor的右孩子接上(左孩子必为nil), fixupNode是successor的右孩子
 
-               删除B, E代表的子树接到B位置上
-               情况1:                                                       
+               情况1: successor(G)非B节点的孩子, G节点的右孩子为非nil
                             A                 A                  A    
                           /   \             /   \              /   \  
                remove -> B     C   -->     G     C   -->      G     C 
@@ -292,20 +291,9 @@ private:
                            / \               / \                / \   
                           G   H         ->  G   H          ->  J   H  
                          / \               / \                / \     
-                       nil  J             nil J              nil J    
+                       nil  J             nil J              nil &    
                                                                       
-               情况2:
-                            A                 A                      
-                          /   \             /   \                    
-               remove -> B     C   -->     F     C                   
-                       /   \             /   \                       
-                      E     F           E  -> H                      
-                           / \               / \                     
-                         nil  H             nil &                  
-                              |
-                              &
-
-                情况3:
+               情况2: successor(G)为B节点的孩子, 但G节点的右孩子为nil
                             A                   A                         
                           /   \               /   \                       
                remove -> B     C     -->     G     C                      
@@ -316,18 +304,24 @@ private:
                          / \                 / \                          
                        nil1 nil2           nil1 nil2                      
                                                                          
+               情况3: successor(F)为B节点的孩子
+                            A                 A                      
+                          /   \             /   \                    
+               remove -> B     C   -->     F     C                   
+                       /   \             /   \                       
+                      E     F           E  -> H                      
+                           / \               / \                     
+                         nil  H             nil &                  
+                              |
+                              &
+
             */
             Node* successor = minimum(node->right);
-            assert(!successor->left);
+            assert(successor->left->isNil());
             ret = successor;
             originColor = successor->color;
             if (successor->parent != node) {
                 ret = successor->right;
-                if (ret == nullptr) {
-                    nil.parent = successor->parent;
-                    nil.leftChild = false;
-                    ret = &nil;
-                }
                 transparent(successor->right, successor);
                 successor->right = node->right;
                 node->right->parent = successor;
@@ -337,7 +331,6 @@ private:
             successor->color = node->color;
             transparent(successor, node);
         } while (false);
-        assert(ret != &nil || (!ret->parent->left));
         return ret;
     }
 
