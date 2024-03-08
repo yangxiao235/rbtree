@@ -4,32 +4,55 @@ enum Color {
     BLACK,
     RED
 };
+
+
 struct Node {
     int elem;
     Color color;
     struct Node* parent;
     struct Node *left, *right;
-    Node(int elem=-1, Color color=BLACK, Node* parent=nullptr, Node* left=nullptr, Node* right=nullptr)
+    Node(int elem=-1, Color color=BLACK, Node* parent=new NilNode, Node* left = new NilNode, Node* right =new NilNode)
         :elem(elem),color(color),parent(parent),left(left),right(right)
-    {}
+    {
+        left->parent = this;
+        right->parent = this;
+    }
 
+    virtual bool isNil() {
+        return false;
+    }
 };
 
-struct NilNode : public Node
-{
-    bool leftChild = false;
+struct NilNode : public Node {
+    virtual bool isNil() override {
+        return true;
+    }
+    NilNode(int elem=-1, Color color=BLACK, Node* parent=nullptr, Node* left = nullptr, Node* right = nullptr)
+    {
+        
+    }
 };
 
 static bool color(Node* node) {
-    return node == nullptr ? BLACK : node->color;
+    return node->color;
 }
 
 static bool nodeColor(Node* node) {
-    return node == nullptr ? BLACK : node->color;
+    return node->color;
 }
 
 static bool nodeIsLeaf(Node* node) {
-    return !node->left || !node->right;
+    return node->left->isNil() && node->right->isNil();
+}
+
+static void deleteNode(Node* node) {
+    assert(node);
+    assert(node->left);
+    assert(node->right);
+
+    delete node->left;
+    delete node->right;
+    delete node;
 }
 
 class RBTree {
@@ -43,21 +66,20 @@ public:
     void remove(int elem)
     {
         Node* node = findNode(elem);
-        if (!node) {
+        if (node->isNil()) {
             return;
         }
-        do {
-            if (node == root && nodeIsLeaf(node)) {
-                root = nullptr;
-                break;
-            }
-            Color originalColor;
-            Node* fixupNode = rbremove(node, originalColor);
-            if (originalColor == BLACK) {
-                removeFixup(fixupNode);
-            }
-        } while (false);
-        delete node;
+        if (node == root && nodeIsLeaf(node)) {
+            deleteNode(node);
+            root = new NilNode();
+            return;
+        }
+        Color originalColor;
+        Node* fixupNode = rbremove(node, originalColor);
+        if (originalColor == BLACK) {
+            removeFixup(fixupNode);
+        }
+        deleteNode(node);
     }
 
     bool find(int elem)
@@ -186,7 +208,7 @@ private:
 
     Node* findNode(int elem) {
         Node* node = root;
-        while (node && node->elem != elem) {
+        while (!node->isNil() && node->elem != elem) {
             if (node->elem < elem) {
                 node = node->right;
             }
@@ -212,13 +234,18 @@ private:
 
         do {
             /*
+            
+            ---
+            1.1
+            ---
+            情况1: 删除B, B的左孩子为nil, E代表的子树接到B位置上,E节点不为nil
                     A
                   /   \
-                 B     C
+             --> B     C
                 / \   /  \
               nil  E  F   G
 
-               删除B, E代表的子树接到B位置上
+            情况2: 和情况1一样, 但E节点为nil
                      A
                   /     \
                  B        C
@@ -226,18 +253,16 @@ private:
               nil1 nil2 F    G
             */
             originColor = node->color;
-            if (!node->left) {
+            if (node->left->isNil()) {
                 transparent(node->right, node);
                 ret = node->right;
-                if (ret == nullptr) {
-                    nil.parent = node->parent;
-                    nil.leftChild = false;
-                    ret = &nil;
-                }
                 break;
             }
             /*
-               删除B, E代表的子树接到B位置上
+            ----
+            1.2
+            ----
+               删除B, B的左孩子非nil,右孩子为nil, E代表的子树接到B位置上
                     
                     A
                   /   \
@@ -245,12 +270,18 @@ private:
                /   \
               E    nil
             */
-            if (!node->right) {
+            if (node->right->isNil()) {
                 transparent(node->left, node);
                 ret = node->left;
                 break;
             }
             /*
+             ----
+             2.1
+             ----
+             B节点的左孩子, 右孩子均不为nil, 找到B节点的后继(successor), 移到B节点位置, 原来的successor位置由
+             successor的右孩子接上(左孩子必为nil), fixupNode是successor的右孩子
+
                删除B, E代表的子树接到B位置上
                情况1:                                                       
                             A                 A                  A    
