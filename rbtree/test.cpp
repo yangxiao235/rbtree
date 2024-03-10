@@ -370,7 +370,7 @@ private:
         }
         Node* parent = root;
         Node* node = root;
-        while (node) {
+        while (!node->isNil) {
             parent = node;
             if (node->elem == elem) {
                 return node;
@@ -384,9 +384,13 @@ private:
         }
         node = new Node(elem, RED);
         if (parent->elem < elem) {
+            _ASSERT(parent->right->isNil);
+            delete parent->right;
             parent->right = node;
         }
         else {
+            _ASSERT(parent->left->isNil);
+            delete parent->left;
             parent->left = node;
         }
         node->parent = parent;
@@ -617,16 +621,16 @@ TEST(RBTree, Insert) {
         makeChilds(tree.root->left->right, new Node(12, RED), new Node(18, RED));
         tree.insert(19);
         EXPECT_NODE(tree.root, 15, BLACK, nullptr);
-        //EXPECT_NODE(tree.root->left, 10, RED, tree.root);
-        //EXPECT_NODE(tree.root->right, 20, RED, tree.root);
-        //EXPECT_NODE(tree.root->left->left, 5, BLACK, tree.root->left);
-        //EXPECT_NODE(tree.root->left->right, 12, BLACK, tree.root->left);
-        //EXPECT_NODE(tree.root->right->left, 18, BLACK, tree.right);
-        //EXPECT_NODE(tree.root->right->right, 40, BLACK, tree.right);
-        //EXPECT_NODE(tree.root->right->left->right, 19, RED, tree.right->left);
+        EXPECT_NODE(tree.root->left, 10, RED, tree.root);
+        EXPECT_NODE(tree.root->right, 20, RED, tree.root);
+        EXPECT_NODE(tree.root->left->left, 5, BLACK, tree.root->left);
+        EXPECT_NODE(tree.root->left->right, 12, BLACK, tree.root->left);
+        EXPECT_NODE(tree.root->right->left, 18, BLACK, tree.root->right);
+        EXPECT_NODE(tree.root->right->right, 40, BLACK, tree.root->right);
+        EXPECT_NODE(tree.root->right->left->right, 19, RED, tree.root->right->left);
 
         // insert & delete
-        int elems[] = {7, 40, 5, 20, 10};
+        int elems[] = {20, 10, 40, 5, 15, 12, 18, 19};
         for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
             EXPECT_EQ(tree.find(elems[i]), true);
         }
@@ -827,7 +831,6 @@ TEST(RBTree, Delete) {
                 EXPECT_EQ(tree.find(elems[j]), false);
             }
             for (int j = i+1; j < sizeof(elems)/sizeof(elems[0]); j++) {
-                std::cout << "elems[j] " << elems[j] << std::endl;
                 EXPECT_EQ(tree.find(elems[j]), true);
             }
         }
