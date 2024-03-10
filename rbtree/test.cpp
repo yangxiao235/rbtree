@@ -1,3 +1,4 @@
+#include <crtdbg.h>
 #include "pch.h"
 
 enum Color {
@@ -9,18 +10,14 @@ enum Color {
 struct Node {
     int elem;
     Color color;
+    bool isNil;
     struct Node* parent;
     struct Node *left, *right;
-    bool isNil;
-    Node()
-        :isNil(true), elem(-1), color(BLACK), parent(nullptr), left(nullptr), right(nullptr)
+
+    Node(Node* parent, bool isleft)
+        :elem(-1), isNil(true), color(BLACK), parent(parent), left(nullptr), right(nullptr)
     {
-    }
-    Node(Node* parent, bool left)
-        :isNil(true)
-    {
-        this->parent = parent;
-        if (left) {
+        if (isleft) {
             this->parent->left = this;
         }
         else {
@@ -47,6 +44,7 @@ static bool color(Node* node) {
 }
 
 static bool nodeColor(Node* node) {
+    _ASSERT(node);
     return node->color;
 }
 
@@ -54,15 +52,6 @@ static bool nodeIsLeaf(Node* node) {
     return node->left->isNil && node->right->isNil;
 }
 
-static void deleteNode(Node* node) {
-    assert(node);
-    assert(node->left);
-    assert(node->right);
-
-    delete node->left;
-    delete node->right;
-    delete node;
-}
 
 class RBTree {
 public:
@@ -79,9 +68,8 @@ public:
             return;
         }
         if (node == root && nodeIsLeaf(node)) {
-            deleteNode(node);
-            delete node->parent;
-            root = new Node;
+            delete node;
+            root = nullptr;
             return;
         }
         Color originalColor;
@@ -89,18 +77,22 @@ public:
         if (originalColor == BLACK) {
             removeFixup(fixupNode);
         }
-        deleteNode(node);
+        delete node;
     }
 
     bool find(int elem)
     {
-        return findNode(elem) != nullptr;
+        Node* ret = findNode(elem);
+        if (!ret || ret->isNil) {
+            return false;
+        }
+        return true;
     }
 
 private:
     void leftRotate(Node* node) {
         Node* r = node->right;
-        if (!node->parent->isNil) {
+        if (node->parent) {
             if (node == node->parent->left) {
                 node->parent->left = r;
             }
@@ -118,7 +110,7 @@ private:
             node->right = r->left;
         }
         else {
-            node->right = new Node;
+            node->right = new Node(node, false);
         }
         r->left = node;
         node->parent = r;
@@ -138,26 +130,31 @@ private:
         }
         else {
             root = l;
-            l->parent = new Node;
+            l->parent = nullptr;
         }
         if (l->right) {
             l->right->parent = node;
             node->left = l->right;
         }
         else {
-            node->left = new Node;
+            node->left = new Node(node, true);
         }
         l->right = node;
         node->parent = l;
     }
 
     Node* findNode(int elem) {
+        if (!root) {
+            return nullptr;
+        }
         Node* node = root;
         while (!node->isNil && node->elem != elem) {
             if (node->elem < elem) {
+                _ASSERT(node->right);
                 node = node->right;
             }
             else {
+                _ASSERT(node->left);
                 node = node->left;
             }
         }
@@ -165,7 +162,7 @@ private:
     }
 
     Node* minimum(Node* node) {
-        assert(node);
+        _ASSERT(node);
         while (!node->left->isNil) {
             node = node->left;
         }
@@ -175,23 +172,25 @@ private:
     void removeFixup(Node* node) {
         while (node != root && node->color == BLACK) {
             /*
-            情况1: B的左右孩子均不为nil
-                        |             
-                        A             
-                      /   \           
-             remove->B     C   ->     
-                   /   \
-                  D     E
+            情况1: 
+                        A
+                      /   \
+                -->nil     C  
+
             */
             if (node == node->parent->left) {
-                assert(node->parent->right);
+                // node本身有两层黑色, right不可能为nil
+                _ASSERT(node->parent->right);
+                _ASSERT(!node->parent->right->isNil);
                 Node* right = node->parent->right;
                 if (right->color == RED) {
                     right->color = BLACK;
+                    node->parent->color = RED;
                     leftRotate(node->parent);
                     right = node->parent->right;
                 }
                 if (nodeColor(right->left) == BLACK && nodeColor(right->right) == BLACK) {
+                    _ASSERT(!right->isNil);
                     right->color = RED;
                     node = node->parent;
                     continue;
@@ -203,19 +202,25 @@ private:
                     rightRotate(right);
                     right = node->parent->right;
                 }
+                right->color = node->parent->color;
+                node->parent->color = BLACK;
                 right->right->color = BLACK;
                 leftRotate(node->parent);
                 node = root;
             }
             else {
+                _ASSERT(node->parent->left);
+                _ASSERT(!node->parent->left->isNil);
                 Node* left = node->parent->left;
                 if (left->color == RED) {
                     left->color = BLACK;
+                    node->parent->color = RED;
                     rightRotate(node->parent);
                     left = node->parent->left;
                 }
                 // node有两层黑色, left的child必然不为nullptr
                 if (nodeColor(left->left) == BLACK && nodeColor(left->right) == BLACK) {
+                    _ASSERT(!left->isNil);
                     left->color = RED;
                     node = node->parent;
                     continue;
@@ -227,18 +232,20 @@ private:
                     leftRotate(left);
                     left = node->parent->left;
                 }
+                left->color = node->parent->color;
+                node->parent->color = BLACK;
                 left->left->color = BLACK;
                 rightRotate(node->parent);
                 node = root;
             }
         }
-        root->color = BLACK;
+        node->color = BLACK;
     }
 
     Node *rbremove(Node* node, Color &originColor)
     {
         Node* ret = nullptr;
-        assert(node);
+        _ASSERT(node);
 
         do {
             /*
@@ -325,11 +332,10 @@ private:
 
             */
             Node* successor = minimum(node->right);
-            assert(successor->left->isNil);
-            ret = successor;
+            _ASSERT(successor->left->isNil);
+            ret = successor->right;
             originColor = successor->color;
             if (successor->parent != node) {
-                ret = successor->right;
                 transparent(successor->right, successor);
                 successor->right = node->right;
                 node->right->parent = successor;
@@ -343,7 +349,7 @@ private:
     }
 
     void transparent(Node* src, Node* dest) {
-        assert(dest);
+        _ASSERT(dest);
         if (!dest->parent) {  // dest is the root node
             root = src;
         } else if (dest == dest->parent->left) {
@@ -409,7 +415,7 @@ private:
                     continue;
                 }
                 if (node == node->parent->right) {
-                    assert(node->elem > node->parent->elem);
+                    _ASSERT(node->elem > node->parent->elem);
                     node = parent;
                     leftRotate(parent);
                     parent = node->parent;
@@ -433,7 +439,7 @@ private:
                     continue;
                 }
                 if (node == node->parent->left) {
-                    assert(node->elem <= node->parent->elem);
+                    _ASSERT(node->elem <= node->parent->elem);
                     node = parent;
                     rightRotate(parent);
                     parent = node->parent;
@@ -468,6 +474,15 @@ static void makeChilds(Node* node, Node* left, Node* right)
     }
 }
 
+#define EXPECT_NODE(node, e, c, p)  \
+do {  \
+    EXPECT_EQ((node)->elem, e); \
+    EXPECT_EQ((node)->color, c); \
+    EXPECT_EQ((node)->parent, p); \
+} while (false)
+
+
+
 TEST(RBTree, Rotate) {
     // left rotate
     /*
@@ -489,7 +504,7 @@ TEST(RBTree, Rotate) {
     tree.rightRotate(tree.root);
     EXPECT_EQ(tree.root->elem, 10);
     EXPECT_EQ(tree.root->color, RED);
-    EXPECT_EQ(tree.root->parent->isNil, true);
+    EXPECT_EQ(tree.root->parent, nullptr);
 
     EXPECT_EQ(tree.root->left->elem, 5);
     EXPECT_EQ(tree.root->left->color, BLACK);
@@ -538,192 +553,286 @@ TEST(RBTree, Rotate) {
     EXPECT_EQ(tree.root->right->right->parent, tree.root->right);
 }
 
-//TEST(RBTree, Insert) {
-//    // scratch case
-//    {
-//        RBTree tree;
-//        tree.insert(20);
-//        EXPECT_EQ(tree.root->elem, 20);
-//        EXPECT_EQ(tree.root->color, BLACK);
-//        tree.insert(10);
-//        tree.insert(40);
-//        EXPECT_EQ(tree.root->left->elem, 10);
-//        EXPECT_EQ(tree.root->left->color, RED);
-//        EXPECT_EQ(tree.root->right->elem, 40);
-//        EXPECT_EQ(tree.root->right->color, RED);
-//    }
-//    // case 1
-//    {
-//        RBTree tree;
-//        tree.root = new Node(20);
-//        makeChilds(tree.root, new Node(10, RED), new Node(40, RED));
-//        tree.insert(5);
-//        EXPECT_EQ(tree.root->elem, 20);
-//        EXPECT_EQ(tree.root->color, BLACK);
-//        EXPECT_EQ(tree.root->left->elem, 10);
-//        EXPECT_EQ(tree.root->left->color, BLACK);
-//        EXPECT_EQ(tree.root->right->elem, 40);
-//        EXPECT_EQ(tree.root->right->color, BLACK);
-//        EXPECT_EQ(tree.root->left->left->elem, 5);
-//        EXPECT_EQ(tree.root->left->left->color, RED);
-//    }
-//    // case 2
-//    {
-//        RBTree tree;
-//        tree.root = new Node(20);
-//        makeChilds(tree.root, new Node(10, BLACK), new Node(40, BLACK));
-//        makeChilds(tree.root->left, new Node(7, RED), nullptr);
-//        tree.insert(9);
-//        EXPECT_EQ(tree.root->elem, 20);
-//        EXPECT_EQ(tree.root->color, BLACK);
-//        EXPECT_EQ(tree.root->left->elem, 9);
-//        EXPECT_EQ(tree.root->left->color, BLACK);
-//        EXPECT_EQ(tree.root->right->elem, 40);
-//        EXPECT_EQ(tree.root->right->color, BLACK);
-//        EXPECT_EQ(tree.root->left->left->elem, 7);
-//        EXPECT_EQ(tree.root->left->left->color, RED);
-//        EXPECT_EQ(tree.root->left->right->elem, 10);
-//        EXPECT_EQ(tree.root->left->right->color, RED);
-//    }
-//
-//    // case 3
-//    {
-//        RBTree tree;
-//        tree.root = new Node(20);
-//        makeChilds(tree.root, new Node(10, BLACK), new Node(40, BLACK));
-//        makeChilds(tree.root->left, new Node(7, RED), nullptr);
-//        tree.insert(5);
-//        EXPECT_EQ(tree.root->elem, 20);
-//        EXPECT_EQ(tree.root->color, BLACK);
-//        EXPECT_EQ(tree.root->left->elem, 7);
-//        EXPECT_EQ(tree.root->left->color, BLACK);
-//        EXPECT_EQ(tree.root->right->elem, 40);
-//        EXPECT_EQ(tree.root->right->color, BLACK);
-//        EXPECT_EQ(tree.root->left->left->elem, 5);
-//        EXPECT_EQ(tree.root->left->left->color, RED);
-//        EXPECT_EQ(tree.root->left->left->left, nullptr);
-//        EXPECT_EQ(tree.root->left->left->right, nullptr);
-//        EXPECT_EQ(tree.root->left->right->elem, 10);
-//        EXPECT_EQ(tree.root->left->right->color, RED);
-//        EXPECT_EQ(tree.root->left->right->left, nullptr);
-//        EXPECT_EQ(tree.root->left->right->right, nullptr);
-//        // insert & delete
-//        int elems[] = {7, 40, 5, 20, 10};
-//        for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
-//            EXPECT_EQ(tree.find(elems[i]), true);
-//        }
-//
-//        for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
-//            tree.remove(elems[i]);
-//            for (int j = 0; j <= i; j++) {
-//                EXPECT_EQ(tree.find(elems[j]), false);
-//            }
-//            for (int j = i + 1; j < sizeof(elems) / sizeof(elems[0]); j++) {
-//                EXPECT_EQ(tree.find(elems[j]), true);
-//            }
-//        }
-//    }
-//
-//
-//}
+TEST(RBTree, Insert) {
+    // scratch case
+    {
+        RBTree tree;
+        tree.insert(20);
+        EXPECT_EQ(tree.root->elem, 20);
+        EXPECT_EQ(tree.root->color, BLACK);
+        EXPECT_EQ(tree.root->parent, nullptr);
+        tree.insert(10);
+        tree.insert(40);
+        EXPECT_EQ(tree.root->left->elem, 10);
+        EXPECT_EQ(tree.root->left->color, RED);
+        EXPECT_EQ(tree.root->left->parent, tree.root);
+        EXPECT_EQ(tree.root->right->elem, 40);
+        EXPECT_EQ(tree.root->right->color, RED);
+        EXPECT_EQ(tree.root->right->parent, tree.root);
+    }
+    // case 1
+    /*
+           20        insert 5         20                    20     
+         /    \       ---->         /    \                /    \   
+        |10|  |40|                |10|   |40|   --->     10     40 
+                                  /                     /          
+                                |5|                   |5|
+    */
+    {
+        RBTree tree;
+        tree.root = new Node(20);
+        makeChilds(tree.root, new Node(10, RED), new Node(40, RED));
+        tree.insert(5);
+        EXPECT_EQ(tree.root->elem, 20);
+        EXPECT_EQ(tree.root->color, BLACK);
+        EXPECT_EQ(tree.root->left->elem, 10);
+        EXPECT_EQ(tree.root->left->parent, tree.root); 
+        EXPECT_EQ(tree.root->right->elem, 40);
+        EXPECT_EQ(tree.root->right->color, BLACK);
+        EXPECT_EQ(tree.root->right->parent, tree.root);
+        EXPECT_EQ(tree.root->left->left->elem, 5);
+        EXPECT_EQ(tree.root->left->left->color, RED);
+        EXPECT_EQ(tree.root->left->left->parent, tree.root->left);
+    }
+    // case 2
+    // case 3
+    /*
+             20                        20                                      15           
+           /   \                      /  \                                    /  \          
+        |10|   40                   |15|  40                                |10|  |20|      
+       /   \           --->         /  \          ---->rightRotate(20)      /  \   /  \     
+       5    15                    |10|  18                                 5   12 18  40    
+           /   \                  / \     \                                         \       
+         |12|  |18|              5   12    |19|                                    |19|     
+                 \                                                                          
+                ->|19|                                                                      
+    
+    
+    */
+    {
+        RBTree tree;
+        tree.root = new Node(20);
+        makeChilds(tree.root, new Node(10, RED), new Node(40, BLACK));
+        makeChilds(tree.root->left, new Node(5, BLACK), new Node(15, BLACK));
+        makeChilds(tree.root->left->right, new Node(12, RED), new Node(18, RED));
+        tree.insert(19);
+        EXPECT_NODE(tree.root, 15, BLACK, nullptr);
+        //EXPECT_NODE(tree.root->left, 10, RED, tree.root);
+        //EXPECT_NODE(tree.root->right, 20, RED, tree.root);
+        //EXPECT_NODE(tree.root->left->left, 5, BLACK, tree.root->left);
+        //EXPECT_NODE(tree.root->left->right, 12, BLACK, tree.root->left);
+        //EXPECT_NODE(tree.root->right->left, 18, BLACK, tree.right);
+        //EXPECT_NODE(tree.root->right->right, 40, BLACK, tree.right);
+        //EXPECT_NODE(tree.root->right->left->right, 19, RED, tree.right->left);
 
-//TEST(RBTree, Delete) {
-//    // dont need to do color fixup
-//    {
-//        RBTree tree;
-//        tree.root = new Node(9);
-//        makeChilds(tree.root, new Node(5, RED), new Node(17, RED));
-//        tree.remove(17);
-//        EXPECT_EQ(tree.find(17), false);
-//        EXPECT_EQ(tree.find(9), true);
-//        EXPECT_EQ(tree.find(5), true);
-//    }
-//    // case 1
-//    {
-//        RBTree tree;
-//        tree.root = new Node(9);
-//        makeChilds(tree.root, new Node(5, RED), new Node(17, BLACK));
-//        makeChilds(tree.root->left, new Node(1, BLACK), new Node(6, BLACK));
-//        tree.remove(17);
-//        EXPECT_EQ(tree.find(17), false);
-//        EXPECT_EQ(tree.find(9), true);
-//        EXPECT_EQ(tree.find(5), true);
-//        EXPECT_EQ(tree.find(1), true);
-//        EXPECT_EQ(tree.find(6), true);
-//    }
-//    // case 2
-//    {
-//        RBTree tree;
-//        tree.root = new Node(9);
-//        makeChilds(tree.root, new Node(5, BLACK), new Node(17, BLACK));
-//        makeChilds(tree.root->right, new Node(11, BLACK), new Node(28, BLACK));
-//        tree.remove(17);
-//        EXPECT_EQ(tree.find(17), false);
-//        EXPECT_EQ(tree.find(9), true);
-//        EXPECT_EQ(tree.find(28), true);
-//        EXPECT_EQ(tree.find(11), true);
-//        EXPECT_EQ(tree.find(5), true);
-//    }
-//    // case 3
-//    {
-//        RBTree tree;
-//        tree.root = new Node(9);
-//        makeChilds(tree.root, new Node(5, BLACK), new Node(17, BLACK));
-//        makeChilds(tree.root->left, new Node(1, BLACK), new Node(7, RED));
-//        makeChilds(tree.root->left->right, new Node(6), new Node(8, BLACK));
-//        tree.remove(17);
-//        EXPECT_EQ(tree.find(17), false);
-//        EXPECT_EQ(tree.find(9), true);
-//        EXPECT_EQ(tree.find(5), true);
-//        EXPECT_EQ(tree.find(1), true);
-//        EXPECT_EQ(tree.find(7), true);
-//        EXPECT_EQ(tree.find(6), true);
-//        EXPECT_EQ(tree.find(8), true);
-//    }
-//    // case 4
-//    {
-//        RBTree tree;
-//        tree.root = new Node(9);
-//        makeChilds(tree.root, new Node(5, BLACK), new Node(17, BLACK));
-//        makeChilds(tree.root->left, new Node(1, RED), new Node(6, BLACK));
-//        makeChilds(tree.root->left->left, new Node(-1, BLACK), new Node(3, BLACK));
-//        makeChilds(tree.root->right, new Node(11, BLACK), new Node(28, BLACK));
-//        tree.remove(17);
-//        EXPECT_EQ(tree.find(17), false);
-//        EXPECT_EQ(tree.find(9), true);
-//        EXPECT_EQ(tree.find(5), true);
-//        EXPECT_EQ(tree.find(1), true);
-//        EXPECT_EQ(tree.find(6), true);
-//        EXPECT_EQ(tree.find(-1), true);
-//        EXPECT_EQ(tree.find(3), true);
-//        EXPECT_EQ(tree.find(11), true);
-//        EXPECT_EQ(tree.find(28), true);
-//    }
-//
-//    {
-//        RBTree tree;
-//        tree.root = new Node(9);
-//        makeChilds(tree.root, new Node(5, BLACK), new Node(17, BLACK));
-//        makeChilds(tree.root->left, new Node(1, RED), new Node(6, BLACK));
-//        makeChilds(tree.root->left->left, new Node(-1, BLACK), new Node(3, BLACK));
-//        makeChilds(tree.root->right, new Node(11, BLACK), new Node(28, BLACK));
-//        Node* left = tree.findNode(11);
-//        tree.remove(28);
-//        EXPECT_EQ(left->color, RED);
-//        EXPECT_EQ(tree.find(28), false);
-//        int elems[] = { 9, 5, 17, 1, 6, -1, 3};
-//        for (int i = 0; i < sizeof(elems)/sizeof(elems[0]); i++) {
-//            tree.remove(elems[i]);
-//            for (int j = 0; j <= i; j++) {
-//                EXPECT_EQ(tree.find(elems[j]), false);
-//            }
-//            for (int j = i+1; j < sizeof(elems)/sizeof(elems[0]); j++) {
-//                std::cout << "elems[j] " << elems[j] << std::endl;
-//                EXPECT_EQ(tree.find(elems[j]), true);
-//            }
-//        }
-//    }
-//}
+        // insert & delete
+        int elems[] = {7, 40, 5, 20, 10};
+        for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
+            EXPECT_EQ(tree.find(elems[i]), true);
+        }
+
+        for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
+            tree.remove(elems[i]);
+            for (int j = 0; j <= i; j++) {
+                EXPECT_EQ(tree.find(elems[j]), false);
+            }
+            for (int j = i + 1; j < sizeof(elems) / sizeof(elems[0]); j++) {
+                EXPECT_EQ(tree.find(elems[j]), true);
+            }
+        }
+    }
+
+
+}
+
+TEST(RBTree, Delete) {
+    // dont need to do color fixup
+    {
+        /*
+                9                9
+              /   \       ->    / 
+             |5|   |17|       |5|
+
+        */
+        RBTree tree;
+        tree.root = new Node(9);
+        makeChilds(tree.root, new Node(5, RED), new Node(17, RED));
+        tree.remove(17);
+        EXPECT_EQ(tree.root->elem, 9);
+        EXPECT_EQ(tree.root->color, BLACK);
+        EXPECT_EQ(tree.root->parent, nullptr);
+        EXPECT_EQ(tree.root->left->elem, 5);
+        EXPECT_EQ(tree.root->left->color, RED);
+        EXPECT_EQ(tree.root->left->parent, tree.root);
+        EXPECT_EQ(tree.root->left->left->isNil, true);
+        EXPECT_EQ(tree.root->left->right->isNil, true);
+        EXPECT_EQ(tree.root->right->isNil, true);
+    }
+    // case 1
+    {
+        /*
+               9                   5
+             /   \               /   \
+           |5|    17  -->       1     9
+          /  \                       /
+         1    6                    |6|
+        
+        */
+
+        RBTree tree;
+        tree.root = new Node(9);
+        makeChilds(tree.root, new Node(5, RED), new Node(17, BLACK));
+        makeChilds(tree.root->left, new Node(1, BLACK), new Node(6, BLACK));
+        tree.remove(17);
+        EXPECT_EQ(tree.root->elem, 5);
+        EXPECT_EQ(tree.root->color, BLACK);
+        EXPECT_EQ(tree.root->parent, nullptr);
+        EXPECT_EQ(tree.root->left->elem, 1);
+        EXPECT_EQ(tree.root->left->color, BLACK);
+        EXPECT_EQ(tree.root->left->parent, tree.root);
+        EXPECT_EQ(tree.root->left->left->isNil, true);
+        EXPECT_EQ(tree.root->left->right->isNil, true);
+
+        EXPECT_EQ(tree.root->right->elem, 9);
+        EXPECT_EQ(tree.root->right->color, BLACK);
+        EXPECT_EQ(tree.root->right->parent, tree.root);
+        EXPECT_EQ(tree.root->right->left->elem, 6);
+        EXPECT_EQ(tree.root->right->left->color, RED);
+        EXPECT_EQ(tree.root->right->left->parent, tree.root->right);
+        EXPECT_EQ(tree.root->right->left->left->isNil, true);
+        EXPECT_EQ(tree.root->right->left->right->isNil, true);
+    }
+    // case 2
+    {
+        /*
+                9                    9
+              /   \                /   \
+             5     17        ->   |5|  28
+           / \    /   \          / \   /
+          3   7 11     28       3   7 |11|
+        */
+        RBTree tree;
+        tree.root = new Node(9);
+        makeChilds(tree.root, new Node(5, BLACK), new Node(17, BLACK));
+        makeChilds(tree.root->left, new Node(3, BLACK), new Node(7, BLACK));
+        makeChilds(tree.root->right, new Node(11, BLACK), new Node(28, BLACK));
+        tree.remove(17);
+
+        EXPECT_EQ(tree.root->elem, 9);
+        EXPECT_EQ(tree.root->color, BLACK);
+        EXPECT_EQ(tree.root->parent, nullptr);
+        EXPECT_EQ(tree.root->left->elem, 5);
+        EXPECT_EQ(tree.root->left->color, RED);
+        EXPECT_EQ(tree.root->left->parent, tree.root);
+        EXPECT_EQ(tree.root->right->elem, 28);
+        EXPECT_EQ(tree.root->right->color, BLACK);
+        EXPECT_EQ(tree.root->right->parent, tree.root);
+
+        EXPECT_EQ(tree.root->left->left->elem, 3);
+        EXPECT_EQ(tree.root->left->left->color, BLACK);
+        EXPECT_EQ(tree.root->left->left->parent, tree.root->left);
+        EXPECT_EQ(nodeIsLeaf(tree.root->left->left), true);
+
+        EXPECT_EQ(tree.root->left->right->elem, 7);
+        EXPECT_EQ(tree.root->left->right->color, BLACK);
+        EXPECT_EQ(tree.root->left->right->parent, tree.root->left);
+        EXPECT_EQ(nodeIsLeaf(tree.root->left->right), true);
+
+        EXPECT_EQ(tree.root->right->left->elem, 11);
+        EXPECT_EQ(tree.root->right->left->color, RED);
+        EXPECT_EQ(tree.root->right->left->parent, tree.root->right);
+        EXPECT_EQ(tree.root->right->right->isNil, true);
+        EXPECT_EQ(nodeIsLeaf(tree.root->right->left), true);
+
+
+    }
+    // case 3
+    {
+        /*
+                 9                          7
+               /   \                      /   \
+              5     17                   5     9
+            /  \    / \     -->        /  \   /  \
+           1  |7|  11   21            1   6   8   21
+             /  \                             /
+            6    8                          |11|
+
+        */
+        RBTree tree;
+        tree.root = new Node(9);
+        makeChilds(tree.root, new Node(5, BLACK), new Node(17, BLACK));
+        makeChilds(tree.root->left, new Node(1, BLACK), new Node(7, RED));
+        makeChilds(tree.root->right, new Node(11, BLACK), new Node(21, BLACK));
+        makeChilds(tree.root->left->right, new Node(6, BLACK), new Node(8, BLACK));
+        tree.remove(17);
+
+        EXPECT_EQ(tree.root->elem, 7);
+        EXPECT_EQ(tree.root->color, BLACK);
+        EXPECT_EQ(tree.root->parent, nullptr);
+        EXPECT_EQ(tree.root->left->elem, 5);
+        EXPECT_EQ(tree.root->left->color, BLACK);
+        EXPECT_EQ(tree.root->left->parent, tree.root);
+        EXPECT_EQ(tree.root->right->elem, 9);
+        EXPECT_EQ(tree.root->right->color, BLACK);
+        EXPECT_EQ(tree.root->right->parent, tree.root);
+
+        EXPECT_EQ(tree.root->left->left->elem, 1);
+        EXPECT_EQ(tree.root->left->left->color, BLACK);
+        EXPECT_EQ(tree.root->left->left->parent, tree.root->left);
+        EXPECT_EQ(nodeIsLeaf(tree.root->left->left), true);
+        EXPECT_EQ(tree.root->left->right->elem, 6);
+        EXPECT_EQ(tree.root->left->right->color, BLACK);
+        EXPECT_EQ(tree.root->left->right->parent, tree.root->left);
+        EXPECT_EQ(nodeIsLeaf(tree.root->left->right), true);
+
+        EXPECT_EQ(tree.root->right->left->elem, 8);
+        EXPECT_EQ(tree.root->right->left->color, BLACK);
+        EXPECT_EQ(tree.root->right->left->parent, tree.root->right);
+        EXPECT_EQ(tree.root->right->right->elem, 21);
+        EXPECT_EQ(tree.root->right->right->color, BLACK);
+        EXPECT_EQ(tree.root->right->right->parent, tree.root->right);
+        EXPECT_EQ(nodeIsLeaf(tree.root->right->left), true);
+
+        EXPECT_EQ(tree.root->right->right->right->isNil, true);
+        EXPECT_EQ(tree.root->right->right->left->elem, 11);
+        EXPECT_EQ(tree.root->right->right->left->color, RED);
+        EXPECT_EQ(tree.root->right->right->left->parent, tree.root->right->right);
+        EXPECT_EQ(nodeIsLeaf(tree.root->right->right->left), true);
+    }
+
+    {
+        /*
+                        9
+                      /   \
+                    5       17
+                   /  \    /  \
+                  |1|  6  11  28
+                 /   \
+                -1    3 
+        */
+        RBTree tree;
+        tree.root = new Node(9);
+        makeChilds(tree.root, new Node(5, BLACK), new Node(17, BLACK));
+        makeChilds(tree.root->left, new Node(1, RED), new Node(6, BLACK));
+        makeChilds(tree.root->left->left, new Node(-1, BLACK), new Node(3, BLACK));
+        makeChilds(tree.root->right, new Node(11, BLACK), new Node(28, BLACK));
+        Node* left = tree.findNode(11);
+        tree.remove(28);
+        EXPECT_EQ(left->color, RED);
+        EXPECT_EQ(tree.find(28), false);
+        int elems[] = { 9, 5, 17, 1, 6, -1, 3, 11};
+        for (int i = 0; i < sizeof(elems)/sizeof(elems[0]); i++) {
+            tree.remove(elems[i]);
+            for (int j = 0; j <= i; j++) {
+                EXPECT_EQ(tree.find(elems[j]), false);
+            }
+            for (int j = i+1; j < sizeof(elems)/sizeof(elems[0]); j++) {
+                std::cout << "elems[j] " << elems[j] << std::endl;
+                EXPECT_EQ(tree.find(elems[j]), true);
+            }
+        }
+    }
+}
 
 
 //#include <cstdlib>
