@@ -57,8 +57,11 @@ class RBTree {
 public:
     void insert(int elem)
     {
-        Node* node = rbinsert(elem);
-        insertFixup(node);
+        bool exist = false;
+        Node* node = rbinsert(elem, exist);
+        if (!exist) {
+            insertFixup(node);
+        }
     }
 
     void remove(int elem)
@@ -363,7 +366,8 @@ private:
         }
     }
 
-    Node *rbinsert(int elem) {
+    Node *rbinsert(int elem, bool &exist) {
+        exist = false;
         if (!root) {
             root = new Node(elem);
             return root;
@@ -373,6 +377,7 @@ private:
         while (!node->isNil) {
             parent = node;
             if (node->elem == elem) {
+                exist = true;
                 return node;
             }
             if (node->elem < elem) {
@@ -420,18 +425,23 @@ private:
                 }
                 if (node == node->parent->right) {
                     _ASSERT(node->elem > node->parent->elem);
+                    _ASSERT(node->color == RED);
+                    _ASSERT(parent->color == RED);
                     node = parent;
                     leftRotate(parent);
                     parent = node->parent;
                 }
+                _ASSERT(node->color == RED);
+                _ASSERT(parent->color == RED);
+                parent->color = BLACK;
+                parent->parent->color = RED;
                 rightRotate(parent->parent);
-                parent->right->color = RED;
                 break;
             }
             else {
                 if (nodeColor(parent->parent->left) == RED) {
                     parent->parent->right->color = BLACK;
-                    if (parent->parent->left) {
+                    if (!parent->parent->left->isNil) {
                         parent->parent->left->color = BLACK;
                     }
                     parent->parent->color = RED;
@@ -443,13 +453,18 @@ private:
                     continue;
                 }
                 if (node == node->parent->left) {
+                    _ASSERT(node->color == RED);
+                    _ASSERT(parent->color == RED);
                     _ASSERT(node->elem <= node->parent->elem);
                     node = parent;
                     rightRotate(parent);
                     parent = node->parent;
                 }
+                _ASSERT(node->color == RED);
+                _ASSERT(parent->color == RED);
+                parent->color = BLACK;
+                parent->parent->color = RED;
                 leftRotate(parent->parent);
-                parent->left->color = RED;
                 break;
 
             }
@@ -477,6 +492,9 @@ static void makeChilds(Node* node, Node* left, Node* right)
         right->parent = node;
     }
 }
+
+
+#include <vector>
 
 #define EXPECT_NODE(node, e, c, p)  \
 do {  \
@@ -601,15 +619,15 @@ TEST(RBTree, Insert) {
     // case 2
     // case 3
     /*
-             20                        20                                      15           
-           /   \                      /  \                                    /  \          
-        |10|   40                   |15|  40                                |10|  |20|      
-       /   \           --->         /  \          ---->rightRotate(20)      /  \   /  \     
-       5    15                    |10|  18                                 5   12 18  40    
-           /   \                  / \     \                                         \       
-         |12|  |18|              5   12    |19|                                    |19|     
-                 \                                                                          
-                ->|19|                                                                      
+             20                                      15           
+           /   \                                    /  \          
+        |10|   40                                 |10|  |20|      
+       /   \            ---->rightRotate(20)      /  \   /  \     
+       5    15                                   5   12 18  40    
+           /   \                                          \       
+         |12|  |18|                                      |19|     
+                 \                                                
+                ->|19|                                            
     
     
     */
@@ -629,21 +647,71 @@ TEST(RBTree, Insert) {
         EXPECT_NODE(tree.root->right->right, 40, BLACK, tree.root->right);
         EXPECT_NODE(tree.root->right->left->right, 19, RED, tree.root->right->left);
 
-        // insert & delete
-        int elems[] = {20, 10, 40, 5, 15, 12, 18, 19};
-        for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
-            EXPECT_EQ(tree.find(elems[i]), true);
-        }
+        //// insert & delete
+        //int elems[] = {20, 10, 40, 5, 15, 12, 18, 19};
+        //for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
+        //    EXPECT_EQ(tree.find(elems[i]), true);
+        //}
 
-        for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
-            tree.remove(elems[i]);
-            for (int j = 0; j <= i; j++) {
-                EXPECT_EQ(tree.find(elems[j]), false);
-            }
-            for (int j = i + 1; j < sizeof(elems) / sizeof(elems[0]); j++) {
-                EXPECT_EQ(tree.find(elems[j]), true);
-            }
+        //for (int i = 0; i < sizeof(elems) / sizeof(elems[0]); i++) {
+        //    tree.remove(elems[i]);
+        //    for (int j = 0; j <= i; j++) {
+        //        EXPECT_EQ(tree.find(elems[j]), false);
+        //    }
+        //    for (int j = i + 1; j < sizeof(elems) / sizeof(elems[0]); j++) {
+        //        EXPECT_EQ(tree.find(elems[j]), true);
+        //    }
+        //}
+    }
+
+    {
+    
+        RBTree tree;
+        std::vector<int> elems;
+
+        elems = { 1, 2, 3, 4, 5, 6, 7 };
+        for (auto elem : elems) {
+            tree.insert(elem);
         }
+        EXPECT_NODE(tree.root, 2, BLACK, nullptr);
+        EXPECT_NODE(tree.root->left, 1, BLACK, tree.root);
+        EXPECT_NODE(tree.root->right, 4, RED, tree.root);
+        EXPECT_NODE(tree.root->right->left, 3, BLACK, tree.root->right);
+        EXPECT_NODE(tree.root->right->right, 6, BLACK, tree.root->right);
+        EXPECT_NODE(tree.root->right->right->left, 5, RED, tree.root->right->right);
+        EXPECT_NODE(tree.root->right->right->right, 7, RED, tree.root->right->right);
+    }
+
+    {
+        RBTree tree;
+        std::vector<int> elems;
+        elems = { 7, 6, 5, 4, 3, 2, 1 };
+        for (auto elem : elems) {
+            tree.insert(elem);
+        }
+        EXPECT_NODE(tree.root, 6, BLACK, nullptr);
+        EXPECT_NODE(tree.root->left, 4, RED, tree.root);
+        EXPECT_NODE(tree.root->right, 7, BLACK, tree.root);
+        EXPECT_NODE(tree.root->left->left, 2, BLACK, tree.root->left);
+        EXPECT_NODE(tree.root->left->right, 5, BLACK, tree.root->left);
+        EXPECT_NODE(tree.root->left->left->left, 1, RED, tree.root->left->left);
+        EXPECT_NODE(tree.root->left->left->right, 3, RED, tree.root->left->left);
+    }
+
+    {
+        RBTree tree;
+        std::vector<int> elems;
+        elems = { 1, 6, 7, 5, 2, 4, 3 };
+        for (auto elem : elems) {
+            tree.insert(elem);
+        }
+        EXPECT_NODE(tree.root, 6, BLACK, nullptr);
+        EXPECT_NODE(tree.root->left, 2, RED, tree.root);
+        EXPECT_NODE(tree.root->right, 7, BLACK, tree.root);
+        EXPECT_NODE(tree.root->left->left, 1, BLACK, tree.root->left);
+        EXPECT_NODE(tree.root->left->right, 4, BLACK, tree.root->left);
+        EXPECT_NODE(tree.root->left->right->left, 3, RED, tree.root->left->right);
+        EXPECT_NODE(tree.root->left->right->right, 5, RED, tree.root->left->right);
     }
 
 
@@ -838,41 +906,43 @@ TEST(RBTree, Delete) {
 }
 
 
-//#include <cstdlib>
-//#include <set>
-//#include <vector>
-//TEST(RBTree, RandomModify) {
-//    std::vector<int> nums1;
-//    std::set<int> nums2;
-//    //int elemMax = 10000000;
-//    int elemMax = 30;
-//    //int nelems = elemMax*7/8;
-//    int nelems = 99;
-//    nums1.resize(nelems);
-//    for (int i = 0; i < nums1.size(); i++) {
-//        nums1[i] = rand() % elemMax;
-//        nums2.insert(nums1[i]);
-//    }
-//#if 0
-//    nums1 = { 41,17,34,0,19,24,28,8,12,14,5,45,31,27,11,41,45,42,27,36 };
-//    nums2 = { 0,5,8,11,12,14,17,19,24,27,28,31,34,36,41,42,45 };
-//#endif
-//
-//#if 1
-//    nums1 = { 11,17,4,10,29,4,18,18,22,14,5,5,1,27,1,11,25,2,27,6,21,24,2,3,22,22,21,26,8,5,17,6,11,18,9,22,17,19,25,24,23,21,2,3,3,14,21,1,23,28,17,14,22,27,27,19,23,21,19,28,16,5,20,12,18,16,10,2,4,28,26,15,20,9,10,20,6,21,3,8,9,23,24,4,6,20,16,26,11,28,24,9,26,13,17,28,8,12,9 };
-//    nums2 = { 1,2,3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29 };
-//#endif 
-//    RBTree tree;
-//    for (int i = 0; i < nums1.size(); i++) {
-//        tree.insert(nums1[i]);
-//    }
-//    tree.find(2);
-//    for (auto num : nums2) {
-//        EXPECT_EQ(tree.find(num), true);
-//        tree.remove(num);
-//        EXPECT_EQ(tree.find(num), false);
-//    }
-//    for (auto num : nums2) {
-//        EXPECT_EQ(tree.find(num), false);
-//    }
-//}
+#include <cstdlib>
+#include <set>
+#include <vector>
+TEST(RBTree, RandomModify) {
+    std::vector<int> nums1;
+    std::set<int> nums2;
+    int elemMax = 10000000;
+    int nelems = elemMax*7/8;
+#if 0
+    int elemMax = 30;
+    int nelems = 99;
+#endif
+    nums1.resize(nelems);
+    for (int i = 0; i < nums1.size(); i++) {
+        nums1[i] = rand() % elemMax;
+        nums2.insert(nums1[i]);
+    }
+#if 0
+    nums1 = { 41,17,34,0,19,24,28,8,12,14,5,45,31,27,11,41,45,42,27,36 };
+    nums2 = { 0,5,8,11,12,14,17,19,24,27,28,31,34,36,41,42,45 };
+#endif
+
+#if 0
+    nums1 = { 11,17,4,10,29,4,18,18,22,14,5,5,1,27,1,11,25,2,27,6,21,24,2,3,22,22,21,26,8,5,17,6,11,18,9,22,17,19,25,24,23,21,2,3,3,14,21,1,23,28,17,14,22,27,27,19,23,21,19,28,16,5,20,12,18,16,10,2,4,28,26,15,20,9,10,20,6,21,3,8,9,23,24,4,6,20,16,26,11,28,24,9,26,13,17,28,8,12,9 };
+    nums2 = { 1,2,3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29 };
+#endif 
+    RBTree tree;
+    for (int i = 0; i < nums1.size(); i++) {
+        tree.insert(nums1[i]);
+    }
+    tree.find(2);
+    for (auto num : nums2) {
+        EXPECT_EQ(tree.find(num), true);
+        tree.remove(num);
+        EXPECT_EQ(tree.find(num), false);
+    }
+    for (auto num : nums2) {
+        EXPECT_EQ(tree.find(num), false);
+    }
+}
